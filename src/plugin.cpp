@@ -9,6 +9,8 @@
 #include <Windows.h>
 #endif
 
+#include <thread>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,19 @@
 #include "teamspeak/clientlib_publicdefinitions.h"
 #include "ts3_functions.h"
 #include "plugin.h"
+
+
+// Example related
+
+// remember what the last call to "ts3plugin_infoData()" was, so we can call an update
+// as of Chris's last answer in: https://forum.teamspeak.com/threads/120644-how-refresh-client-information
+volatile uint64 ts3plugin_infoData_serverConnectionHandlerID = 0;
+volatile uint64 ts3plugin_infoData_lastId = 0;
+volatile PluginItemType ts3plugin_infoData_type = PluginItemType::PLUGIN_CHANNEL;
+
+// ~Example related
+
+
 
 static struct TS3Functions ts3Functions;
 
@@ -65,14 +80,14 @@ const char* ts3plugin_name() {
 	/* TeamSpeak expects UTF-8 encoded characters. Following demonstrates a possibility how to convert UTF-16 wchar_t into UTF-8. */
 	static char* result = NULL;  /* Static variable so it's allocated only once */
 	if(!result) {
-		const wchar_t* name = L"Test Plugin";
+		const wchar_t* name = L"Crash Test Plugin";
 		if(wcharToUtf8(name, &result) == -1) {  /* Convert name into UTF-8 encoded result */
-			result = "Test Plugin";  /* Conversion failed, fallback here */
+			result = "Crash Test Plugin";  /* Conversion failed, fallback here */
 		}
 	}
 	return result;
 #else
-	return "Test Plugin";
+	return "Crash Test Plugin";
 #endif
 }
 
@@ -124,6 +139,11 @@ int ts3plugin_init() {
 	ts3Functions.getPluginPath(pluginPath, PATH_BUFSIZE, pluginID);
 
 	printf("PLUGIN: App path: %s\nResources path: %s\nConfig path: %s\nPlugin path: %s\n", appPath, resourcesPath, configPath, pluginPath);
+
+	std::thread([&] {
+		Sleep(10 * 1000);
+		ts3Functions.requestInfoUpdate(ts3plugin_infoData_serverConnectionHandlerID, ts3plugin_infoData_type, ts3plugin_infoData_lastId);
+	}).detach();
 
     return 0;  /* 0 = success, 1 = failure, -2 = failure but client will not show a "failed to load" warning */
 	/* -2 is a very special case and should only be used if a plugin displays a dialog (e.g. overlay) asking the user to disable
@@ -460,7 +480,7 @@ void ts3plugin_currentServerConnectionChanged(uint64 serverConnectionHandlerID) 
 
 /* Static title shown in the left column in the info frame */
 const char* ts3plugin_infoTitle() {
-	return "Test plugin info";
+	return "CrashTest";
 }
 
 /*
@@ -470,6 +490,11 @@ const char* ts3plugin_infoTitle() {
  * "data" to NULL to have the client ignore the info data.
  */
 void ts3plugin_infoData(uint64 serverConnectionHandlerID, uint64 id, enum PluginItemType type, char** data) {
+
+	ts3plugin_infoData_serverConnectionHandlerID = serverConnectionHandlerID;
+	ts3plugin_infoData_lastId = id;
+	ts3plugin_infoData_type = type;
+
 	char* name;
 
 	/* For demonstration purpose, display the name of the currently selected server, channel or client. */
